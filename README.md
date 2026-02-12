@@ -2,9 +2,12 @@
 
 ## Purpose
 This pipeline synchronizes audio, video, and brain vision (EEG and task markers) data. 
-Expected inputs: preprocessed task data (MATLAB file), audio, and video files
-Expected outputs: audio and video file cropped and aligned with brain vision recording 
+- Expected inputs: BrainVision vhdr file and audio file (from pulse system input)
+- Expected outputs: audio and video file cropped and aligned with brain vision recording 
 
 ## Example
 
 ## Requirements
+- python=3.11
+- scipy=1.17.0
+- mne=1.11.0
