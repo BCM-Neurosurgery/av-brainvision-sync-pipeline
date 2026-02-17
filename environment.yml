@@ -5,3 +5,4 @@ dependencies:
   - python=3.11
   - scipy=1.17.0
   - mne=1.11.0
+  - pydub=0.25.1

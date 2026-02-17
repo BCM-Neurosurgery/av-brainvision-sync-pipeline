@@ -6,6 +6,7 @@ This pipeline synchronizes audio, video, and brain vision (EEG and task markers)
 - Expected outputs: audio and video file cropped and aligned with brain vision recording 
 
 ## Example
+Execute audio_eeg_sync.py
 
 ## Requirements
 - python=3.11
