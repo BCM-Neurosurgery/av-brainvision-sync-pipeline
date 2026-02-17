@@ -9,7 +9,7 @@ import os
 import numpy as np
 from scipy.signal import correlate
 
-# pulls up the file explorer 
+# pulls up the file explorer and selects a file
 def select_file(title, filetype):
     root = tk.Tk()
     root.withdraw()
@@ -19,10 +19,22 @@ def select_file(title, filetype):
         filetypes=filetype
     )
     root.destroy()
-    if file_path is None:
+    if not file_path:
         print(f"No file selected for {filetype[0][0]}")
         sys.exit(0)
     return Path(str(file_path))
+
+# pulls up the file explorer and selects a directory
+def select_dir(title):
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+    dir_path = filedialog.askdirectory(title=title)
+    root.destroy()
+    if not dir_path:
+        print("No directory selected for video")
+        sys.exit(0)
+    return Path(str(dir_path))
 
 # find the first stimulus as the experiment start and the last stimulus
 def find_experiment_times(events, event_id):
@@ -48,17 +60,7 @@ def parse_brainvision(vhdr_path_object):
     start_time = start_sample/sfreq
     end_time = end_sample/sfreq + 10   # pad the end time with 10 seconds after last stimulus
 
-    response_labels = [
-        label for label in event_id if label.startswith("Response")
-    ]
-    response_numbers = []
-    for label in response_labels:
-        number_str = label.split("R")[-1].strip()
-        response_numbers.append(int(number_str))
-    response_idx = response_numbers.index(max(response_numbers))
-    response_label = response_labels[response_idx]   
-
-    response_code = event_id[response_label]
+    response_code = event_id["Response/R257"]
     response_rows = events[events[:,2] == response_code]
     response_samples = response_rows[:,0]
     response_times = response_samples/sfreq
@@ -67,6 +69,7 @@ def parse_brainvision(vhdr_path_object):
 # parse the audio file to get the pulses array 
 def parse_audio(audio_path_object):
     sfreq, voltages = wavfile.read(audio_path_object)
+    print("voltages shape:", voltages.shape, "dtype:", voltages.dtype)
     voltages_abs = np.abs(voltages) 
     threshold = 0.5*np.max(voltages_abs)
     # count pulses as voltages over threshold
@@ -85,9 +88,11 @@ def find_time_alignment(bv_pulse_times, audio_pulse_times):
     # take the diff of each array
     bv_times_diff = np.diff(bv_pulse_times)
     audio_times_diff= np.diff(audio_pulse_times)
+    print("BV diff pulses:", len(bv_times_diff), "range:", bv_times_diff[0], "to", bv_times_diff[-1])
+    print("Audio pulses:", len(audio_times_diff), "range:", audio_times_diff[0], "to", audio_times_diff[-1])
     c = correlate(audio_times_diff, bv_times_diff, mode="full")
-    max_index= int(np.argmax(c))
-    best_lag = max_index - (len(bv_times_diff) - 1)
+    lags = np.arange(-(len(bv_times_diff)-1), len(audio_times_diff))
+    best_lag = lags[np.argmax(c)]
 
     # convert the lag into start indices
     if best_lag>=0:
@@ -110,5 +115,10 @@ def apply_alignment(rel_clock_rates, offset, bv_time, audio_sfreq):
     audio_sample = int(round(audio_time*audio_sfreq))
     return audio_sample
 
+# TO DO function to find the start of the experiment with the old, beep matching method
+def test_against_beep(audio_file, beep_file, predicted_audio_start_time):
+    sfreq, voltages = wavfile.read(audio_file)
+    sfreq_beep, voltages_beep = wavfile.read(beep_file)
+    
 
 
