@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 import sys
 from pathlib import Path
 import scipy.io as sio
@@ -28,9 +28,10 @@ def select_file(title, filetype):
 def select_dir(title):
     root = tk.Tk()
     root.withdraw()
-    root.attributes('-topmost', True)
+    messagebox.showinfo("Select Directory", title)
     dir_path = filedialog.askdirectory(title=title)
     root.destroy()
+
     if not dir_path:
         print("No directory selected for video")
         sys.exit(0)
@@ -115,10 +116,35 @@ def apply_alignment(rel_clock_rates, offset, bv_time, audio_sfreq):
     audio_sample = int(round(audio_time*audio_sfreq))
     return audio_sample
 
-# TO DO function to find the start of the experiment with the old, beep matching method
-def test_against_beep(audio_file, beep_file, predicted_audio_start_time):
-    sfreq, voltages = wavfile.read(audio_file)
+# estimate the beep with the old method (waveform matching)
+def estimate_beep(audio_file, beep_file, ds_factor=22):
+    sfreq_audio, voltages_audio = wavfile.read(audio_file)
     sfreq_beep, voltages_beep = wavfile.read(beep_file)
+
+    # cast to float
+    voltages_audio = voltages_audio.astype(np.float32)
+    voltages_beep = voltages_beep.astype(np.float32)
+
+    # remove leading and trailing zeros from beep
+    beep_nonzero_indices = np.nonzero(voltages_beep)[0]
+    voltages_beep = voltages_beep[beep_nonzero_indices[0]:beep_nonzero_indices[-1]]
+
+    # downsample voltages for audio and beep
+    voltages_audio_ds = voltages_audio[::ds_factor]
+    voltages_beep_ds = voltages_beep[::ds_factor]
+
+    sfreq_ds = sfreq_audio/ds_factor
+
+    # find the index where the beep occurs in the audio file
+    corr = correlate(voltages_audio_ds, voltages_beep_ds, mode="valid")
+    istart = int(np.argmax(corr))
+
+    # convert that to time
+    matched_start_time = istart/sfreq_ds
+    
+    return matched_start_time
+
+
     
 
 
