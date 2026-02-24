@@ -2,13 +2,15 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import sys
 from pathlib import Path
-import scipy.io as sio
 from scipy.io import wavfile
 import mne
-import os
 import numpy as np
 from scipy.signal import correlate
 from datetime import datetime
+import os
+import logging
+
+logger = logging.getLogger("audio_eeg_sync")
 
 # pulls up the file explorer and selects a file
 def select_file(title, filetype):
@@ -34,7 +36,7 @@ def select_dir(title, initial_dir=None):
     root.destroy()
 
     if not dir_path:
-        print("No directory selected for video")
+        print("No directory selected")
         sys.exit(0)
     return Path(str(dir_path))
 
@@ -47,7 +49,6 @@ def find_experiment_times(events, event_id):
     stimulus_rows = events[np.isin(events[:,2], stimulus_codes)]
     first_stim_sample = stimulus_rows[0,0]
     last_stim_sample = stimulus_rows[-1,0]
-
     return first_stim_sample, last_stim_sample
 
 # parse the brain vision vhdr and vmrk file to get the pulses array and sampling frequency 
@@ -61,21 +62,31 @@ def parse_brainvision(vhdr_path_object, response_id="Response/R257"):
     start_sample, end_sample= find_experiment_times(events, event_id)
     start_time = start_sample/sfreq
     end_time = end_sample/sfreq + 10   # pad the end time with 10 seconds after last stimulus
+    
+    logger.debug(f"Brainvision task start time: {start_time}")
+    logger.debug(f"Brainvision task end time: {end_time}")
 
     response_code = event_id[response_id]
     response_rows = events[events[:,2] == response_code]
     response_samples = response_rows[:,0]
     response_times = response_samples/sfreq
+
+    logger.debug(f"Brainvision sync pulse array size {len(response_times)}")
+
     return start_time, end_time, response_times
 
 # return the raw audio file list and audio pulse file list from the audio path object
 def get_audio_files(audio_path_object):
     wav_files = list(audio_path_object.glob("*.wav"))
     numeric_prefix = [int(file_obj.name.split("-")[0]) for file_obj in wav_files]
-    min_prefix = min(numeric_prefix)
-    max_prefix = max(numeric_prefix)
+    min_prefix = np.min(numeric_prefix)
+    max_prefix = np.max(numeric_prefix)
     audio_pulse_files = [file_obj for file_obj in wav_files if max_prefix == int(file_obj.name.split("-")[0])]
+    logger.info(f"Found {len(audio_pulse_files)} audio pulse files")
     raw_audio_files = [file_obj for file_obj in wav_files if min_prefix == int(file_obj.name.split("-")[0])]
+    logger.info(f"Found {len(raw_audio_files)} raw audio files")
+    if len(audio_pulse_files) != len(raw_audio_files):
+        logger.warning("Number of audio pulse files doesn't match number of raw audio files")
     return raw_audio_files, audio_pulse_files
 
 # get date time from filename
@@ -113,10 +124,12 @@ def parse_audio(audio_path_object):
     raw_audio_files, audio_pulse_files = get_audio_files(audio_path_object=audio_path_object)
     raw_audio_sorted = sort_files_chronologically(file_list=raw_audio_files)
     audio_pulse_sorted = sort_files_chronologically(file_list=audio_pulse_files)
-
     sfreq, stitched_voltages_pulses = stitch_files(sorted_file_list=audio_pulse_sorted)
-    _, stitched_voltages_raw = stitch_files(sorted_file_list=raw_audio_sorted)
-
+    logger.info("Finished stitching audio pulse files")
+    sfreq_raw, stitched_voltages_raw = stitch_files(sorted_file_list=raw_audio_sorted)
+    logger.info("Finished stitching raw audio files")
+    if sfreq != sfreq_raw:
+        logger.warning("Sampling frequency of audio files do not match")
     voltages_abs = np.abs(stitched_voltages_pulses) 
     threshold = 0.5*np.max(voltages_abs)
     # count pulses as voltages over threshold
@@ -127,6 +140,7 @@ def parse_audio(audio_path_object):
     counted_pulses_boolean = np.diff(pulses_binary_padded)==1
     pulses_confirmed_samples = np.where(counted_pulses_boolean)[0]  # row indices, column indicess
     pulses_confirmed_times = pulses_confirmed_samples/sfreq
+    logger.debug(f"Found {len(pulses_confirmed_times)} pulses in stitched audio pulse file")
 
     return sfreq, pulses_confirmed_times, stitched_voltages_pulses,stitched_voltages_raw
 
@@ -135,9 +149,9 @@ def find_time_alignment(bv_pulse_times, audio_pulse_times):
     # take the diff of each array
     bv_times_diff = np.diff(bv_pulse_times)
     audio_times_diff= np.diff(audio_pulse_times)
-    print("BV diff pulses:", len(bv_times_diff), "range:", bv_times_diff[0], "to", bv_times_diff[-1])
-    print("Audio pulses:", len(audio_times_diff), "range:", audio_times_diff[0], "to", audio_times_diff[-1])
-    print("Smallest 10 audio diffs:", np.sort(audio_times_diff)[:10])
+    logger.debug(f"Brainvision pulse diffs vector length: {len(bv_times_diff)} Range: {np.min(bv_times_diff)} to {np.max(bv_times_diff)}")
+    logger.debug(f"Audio pulse diffs vector length: {len(audio_times_diff)} Range: {np.min(audio_times_diff)} to {np.max(audio_times_diff)}")
+    logger.debug(f"Smallest 10 audio diffs: {np.sort(audio_times_diff)[:10]}")
     
     # z-score 
     bv_times_diff_norm = (bv_times_diff - np.mean(bv_times_diff)) / np.std(bv_times_diff)
@@ -145,21 +159,16 @@ def find_time_alignment(bv_pulse_times, audio_pulse_times):
 
     c = correlate(audio_times_diff_norm, bv_times_diff_norm, mode="valid")
     audio_start_idx = int(np.argmax(c)) 
-    print("audio_start_idx (valid corr):", audio_start_idx)
-    print("max corr:", float(np.max(c)))
-
-    print("audio pulses:", len(audio_pulse_times))
-    print("BV pulses:", len(bv_pulse_times))
+    logger.debug(f"Audio_start_idx (valid corr): {audio_start_idx}")
+    logger.debug(f"Max corr: {float(np.max(c))}")
 
     num_bv_pulses = len(bv_pulse_times)
     audio_aligned_times = audio_pulse_times[audio_start_idx:audio_start_idx + num_bv_pulses]
-    print("First 5 BV diffs:", bv_times_diff[:5])
-    print("First 5 matched audio diffs:",
-      audio_times_diff[audio_start_idx:audio_start_idx+5])
+    logger.info(f"First 5 Brainvision aligned times: {bv_times_diff[:5]}")
+    logger.info(f"First 5 audio aligned times: {audio_times_diff[audio_start_idx:audio_start_idx+5]}")
     
-    rel_clock_rates, offset = np.polyfit(audio_aligned_times, bv_pulse_times, 1)
-    print("rel_clock_rates:", rel_clock_rates)
-    print("offset:", offset)
+    rel_clock_rates, offset = np.polyfit(audio_aligned_times, bv_pulse_times[:len(audio_aligned_times)], 1)
+    logger.debug(f"Line of best fit metrics: Rel_clock_rates: {rel_clock_rates} Offset: {offset}")
     
     return rel_clock_rates, offset
 

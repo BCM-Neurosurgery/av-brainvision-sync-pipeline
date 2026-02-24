@@ -1,8 +1,9 @@
 from helper_functions import *
 from cli_nbu_mvp import run_pipeline_gui
+import logging
 
 if __name__ == "__main__":
-    
+
     # run the beep verification test
     run_test = True
 
@@ -22,7 +23,23 @@ if __name__ == "__main__":
     output_path_obj =select_dir(
         title="Select the directory you want to save the aligned files to"
     )
+    
+    # set up logger
+    timestamp = datetime.now().strftime("%y%m%d_%H%M")
+    log_file_path = output_path_obj / f"audio_eeg_align_{timestamp}.log"
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(log_file_path)
+        ]
+    )
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logger = logging.getLogger("audio_eeg_sync")
+    logger.info("Audio eeg alignment started")
 
+    
     # get the exp start and end time and sync pulses from the brain vision file
     exp_start_time, exp_end_time, bv_sync_pulse_array = parse_brainvision(vhdr_path_object=vhdr_path_obj)
 
@@ -36,16 +53,15 @@ if __name__ == "__main__":
     audio_start_sample = apply_alignment(rel_clock_rates=rel_clock_rates, offset=offset, bv_time=exp_start_time, audio_sfreq=audio_sfreq)
     audio_end_sample = apply_alignment(rel_clock_rates=rel_clock_rates, offset=offset, bv_time=exp_end_time, audio_sfreq=audio_sfreq)
 
-    print("audio_start_sample:", audio_start_sample)
-    print("audio_end_sample:", audio_end_sample)
+    logger.debug(f"audio_start_sample: {audio_start_sample}")
+    logger.debug(f"audio_end_sample: {audio_end_sample}")
 
     # verify the beep against the old system
     # optional test to see if beep from old way is found with equation  
     if run_test == True:
-        audio_file_name = audio_path_obj.name.split("-")[-1]
         pat_beep_file = os.path.join("task_beeps", "PAAT.wav")
         predicted_beep_time = (exp_start_time-offset)/rel_clock_rates
-        print(f"Predicted Beep Time: {predicted_beep_time} seconds")
+        logger.info(f"Predicted {vhdr_path_obj.stem} experiment start time in audio file: {predicted_beep_time} seconds")
         
         # matched_beep_time= estimate_beep(voltages_raw=stitched_voltages_raw, audio_sfreq=audio_sfreq, beep_file=pat_beep_file)
         # diff = abs(matched_beep_time - predicted_beep_time)
