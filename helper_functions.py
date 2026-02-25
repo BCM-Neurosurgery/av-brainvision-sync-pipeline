@@ -201,6 +201,22 @@ def estimate_beep(voltages_raw, audio_sfreq, beep_file, ds_factor=22):
     
     return matched_start_time
 
+# save wav file with predicted beep time and 2 second buffer
+def save_predicted_beep(beep_time, audio_voltages, sfreq, output_path, buffer=2):
+    start_sample = int(round((beep_time - buffer)*sfreq))
+    end_sample = int(round((beep_time+buffer)*sfreq))
+    if start_sample < 0 or end_sample>len(audio_voltages):
+        message = (
+            f"Predicted beep window out of bounds: "
+            f"start={start_sample}, end={end_sample}, "
+            f"signal_length={len(audio_voltages)}"
+            )
+        logger.error(message)
+        raise ValueError(message)
+    beep_segment = audio_voltages[start_sample:end_sample]
+    wavfile.write(output_path, sfreq, beep_segment)
+
+
 
     
 

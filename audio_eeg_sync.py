@@ -55,18 +55,16 @@ if __name__ == "__main__":
 
     logger.debug(f"audio_start_sample: {audio_start_sample}")
     logger.debug(f"audio_end_sample: {audio_end_sample}")
-
-    # verify the beep against the old system
-    # optional test to see if beep from old way is found with equation  
+    
+    predicted_beep_time = (exp_start_time-offset)/rel_clock_rates
+    logger.info(f"Predicted {vhdr_path_obj.stem} experiment start time in audio file: {predicted_beep_time} seconds")
+    
+    # optional test to output the +/- 2sec from predicted task beep time as wav file in output/
     if run_test == True:
-        pat_beep_file = os.path.join("task_beeps", "PAAT.wav")
-        predicted_beep_time = (exp_start_time-offset)/rel_clock_rates
-        logger.info(f"Predicted {vhdr_path_obj.stem} experiment start time in audio file: {predicted_beep_time} seconds")
-        
-        # matched_beep_time= estimate_beep(voltages_raw=stitched_voltages_raw, audio_sfreq=audio_sfreq, beep_file=pat_beep_file)
-        # diff = abs(matched_beep_time - predicted_beep_time)
-        # print(f" Matched Beep Time (Old Method): {matched_beep_time} seconds")
-        # print(f"Predicted experiment start is {diff:.4f} seconds different from matched beep time")
+        date_folder = vhdr_path_obj.parent.parent.name
+        beep_path = output_path_obj / f"beep_segment_{vhdr_path_obj.stem}_{date_folder}.wav"
+        save_predicted_beep(beep_time=predicted_beep_time, audio_voltages=stitched_voltages_raw, sfreq=audio_sfreq, output_path=beep_path)
+        logger.info(f"Saved predicted beep segment to {output_path_obj}")
 
     # run the audio video sync pipeline 
     run_pipeline_gui(
