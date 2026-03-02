@@ -13,7 +13,7 @@ import logging
 logger = logging.getLogger("audio_eeg_sync")
 
 # pulls up the file explorer and selects a file
-def select_file(title, filetype):
+def select_file(title: str, filetype: list[tuple[str, str]]) -> Path:
     root = tk.Tk()
     root.withdraw()
     root.attributes('-topmost', True)
@@ -28,7 +28,7 @@ def select_file(title, filetype):
     return Path(str(file_path))
 
 # pulls up the file explorer and selects a directory
-def select_dir(title, initial_dir=None):
+def select_dir(title: str, initial_dir=None) -> Path:
     root = tk.Tk()
     root.withdraw()
     messagebox.showinfo("Select Directory", title)
@@ -39,6 +39,18 @@ def select_dir(title, initial_dir=None):
         print("No directory selected")
         sys.exit(0)
     return Path(str(dir_path))
+
+# helper function for confirming directory
+def confirm_or_select_dir(guessed_path: Path, title: str, dir_type: str) -> Path: 
+    correct_dir = messagebox.askyesno(
+        "Confirm Directory",
+        f"Is the following {dir_type} directory correct? \n {guessed_path}"
+    )
+    if correct_dir is True:
+        return guessed_path
+    else:
+        correct_dir = select_dir(title=title, initial_dir=guessed_path)
+        return correct_dir
 
 # find the first stimulus as the experiment start and the last stimulus
 def find_experiment_times(events, event_id):
@@ -52,7 +64,7 @@ def find_experiment_times(events, event_id):
     return first_stim_sample, last_stim_sample
 
 # parse the brain vision vhdr and vmrk file to get the pulses array and sampling frequency 
-def parse_brainvision(vhdr_path_object, response_id="Response/R257"):
+def parse_brainvision(vhdr_path_object: Path, response_id="Response/R257") -> tuple[float, float, np.ndarray]:
     raw = mne.io.read_raw_brainvision(vhdr_path_object, preload=False)
     sfreq = raw.info['sfreq']
     events, event_id = mne.events_from_annotations(raw)
@@ -76,7 +88,7 @@ def parse_brainvision(vhdr_path_object, response_id="Response/R257"):
     return start_time, end_time, response_times
 
 # return the raw audio file list and audio pulse file list from the audio path object
-def get_audio_files(audio_path_object):
+def get_audio_files(audio_path_object: Path) -> tuple[list[Path], list[Path]]:
     wav_files = list(audio_path_object.glob("*.wav"))
     numeric_prefix = [int(file_obj.name.split("-")[0]) for file_obj in wav_files]
     min_prefix = np.min(numeric_prefix)
@@ -90,13 +102,13 @@ def get_audio_files(audio_path_object):
     return raw_audio_files, audio_pulse_files
 
 # get date time from filename
-def get_datetime(file_obj, date_format="%y%m%d_%H%M"):
+def get_datetime(file_obj: Path, date_format="%y%m%d_%H%M") -> datetime:
     file_date_time = file_obj.stem.split("-")[1]
     datetime_obj = datetime.strptime(file_date_time, date_format)
     return datetime_obj
 
 # sort the files chronologically
-def sort_files_chronologically(file_list):
+def sort_files_chronologically(file_list: list[Path]) -> list[Path]:
     sorted_files = []
     file_datetimes = []
     for file in file_list:
@@ -109,7 +121,7 @@ def sort_files_chronologically(file_list):
     return sorted_files   
 
 # stitch files together
-def stitch_files(sorted_file_list):
+def stitch_files(sorted_file_list: list[Path]) -> tuple[int, np.ndarray]:
     voltage_chunks = []
     for file in sorted_file_list:
         sfreq, voltages= wavfile.read(file)
@@ -119,7 +131,7 @@ def stitch_files(sorted_file_list):
     return sfreq, stitched_voltages
 
 # parse the audio file to get the pulses array 
-def parse_audio(audio_path_object):
+def parse_audio(audio_path_object: Path) -> tuple[int, np.ndarray, np.ndarray, np.ndarray]:
 
     raw_audio_files, audio_pulse_files = get_audio_files(audio_path_object=audio_path_object)
     raw_audio_sorted = sort_files_chronologically(file_list=raw_audio_files)
@@ -129,7 +141,7 @@ def parse_audio(audio_path_object):
     sfreq_raw, stitched_voltages_raw = stitch_files(sorted_file_list=raw_audio_sorted)
     logger.info("Finished stitching raw audio files")
     if sfreq != sfreq_raw:
-        logger.warning("Sampling frequency of audio files do not match")
+        logger.error("Sampling frequency of audio files do not match")
     voltages_abs = np.abs(stitched_voltages_pulses) 
     threshold = 0.5*np.max(voltages_abs)
     # count pulses as voltages over threshold
@@ -142,10 +154,10 @@ def parse_audio(audio_path_object):
     pulses_confirmed_times = pulses_confirmed_samples/sfreq
     logger.debug(f"Found {len(pulses_confirmed_times)} pulses in stitched audio pulse file")
 
-    return sfreq, pulses_confirmed_times, stitched_voltages_pulses,stitched_voltages_raw
+    return sfreq, pulses_confirmed_times, stitched_voltages_pulses, stitched_voltages_raw
 
 # perform the correlation to get the line of best fit b/w the two aligned time arrays for bv and audio
-def find_time_alignment(bv_pulse_times, audio_pulse_times):
+def find_time_alignment(bv_pulse_times: np.ndarray, audio_pulse_times: np.ndarray) -> tuple[float, float]:
     # take the diff of each array
     bv_times_diff = np.diff(bv_pulse_times)
     audio_times_diff= np.diff(audio_pulse_times)
@@ -172,37 +184,13 @@ def find_time_alignment(bv_pulse_times, audio_pulse_times):
     
     return rel_clock_rates, offset
 
-def apply_alignment(rel_clock_rates, offset, bv_time, audio_sfreq):
+def apply_alignment(rel_clock_rates: float, offset: float, bv_time: float, audio_sfreq: int) -> int:
     audio_time = (bv_time - offset)/rel_clock_rates
     audio_sample = int(round(audio_time*audio_sfreq))
     return audio_sample
 
-# estimate the beep with the old method (waveform matching)
-def estimate_beep(voltages_raw, audio_sfreq, beep_file, ds_factor=22):
-    
-    _, voltages_beep = wavfile.read(beep_file)
-
-    # remove leading and trailing zeros from beep
-    beep_nonzero_indices = np.nonzero(voltages_beep)[0]
-    voltages_beep = voltages_beep[beep_nonzero_indices[0]:beep_nonzero_indices[-1]]
-
-    # downsample voltages for audio and beep
-    voltages_audio_ds = voltages_raw[::ds_factor]
-    voltages_beep_ds = voltages_beep[::ds_factor]
-
-    sfreq_ds = audio_sfreq/ds_factor
-
-    # find the index where the beep occurs in the audio file
-    corr = correlate(voltages_audio_ds, voltages_beep_ds, mode="valid")
-    istart = int(np.argmax(corr))
-
-    # convert that to time
-    matched_start_time = istart/sfreq_ds
-    
-    return matched_start_time
-
 # save wav file with predicted beep time and 2 second buffer
-def save_predicted_beep(beep_time, audio_voltages, sfreq, output_path, buffer=2):
+def save_predicted_beep(beep_time: float, audio_voltages: np.ndarray, sfreq: int, output_path: Path, buffer=2) -> None:
     start_sample = int(round((beep_time - buffer)*sfreq))
     end_sample = int(round((beep_time+buffer)*sfreq))
     if start_sample < 0 or end_sample>len(audio_voltages):

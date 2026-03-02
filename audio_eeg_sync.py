@@ -1,5 +1,5 @@
 from helper_functions import *
-from cli_nbu_mvp import run_pipeline_gui
+from video_sync_wrapper import run_pipeline_gui
 import logging
 
 if __name__ == "__main__":
@@ -12,21 +12,33 @@ if __name__ == "__main__":
         title="Select a brain vision .vhdr file",
         filetype=[("Brain vision header", "*.vhdr")]
     )
-    audio_path_obj = select_dir(
+
+    date_dir= vhdr_path_obj.parent.parent
+    guessed_audio_path = date_dir / "audio"
+    guessed_video_path = date_dir / "video"
+
+    audio_path_obj = confirm_or_select_dir(
+        guessed_path=guessed_audio_path,
         title="Select the directory containing the audio files you want to align",
-        initial_dir=vhdr_path_obj.parent
+        dir_type="audio"
     )
-    video_path_obj = select_dir(
+    video_path_obj = confirm_or_select_dir(
+        guessed_path=guessed_video_path,
         title="Select the directory containing the video files you want to align",
-        initial_dir=vhdr_path_obj.parent
+        dir_type="video"
     )
     output_path_obj =select_dir(
         title="Select the directory you want to save the aligned files to"
     )
+    # test on windows
+    # bash script to run 
+    # get newest versin of code, and submodule, runs this script, 
     
     # set up logger
     timestamp = datetime.now().strftime("%y%m%d_%H%M")
-    log_file_path = output_path_obj / f"audio_eeg_align_{timestamp}.log"
+    log_file_dir = output_path_obj / "logs"
+    log_file_dir.mkdir(parents=True, exist_ok=True)
+    log_file_path = log_file_dir / f"audio_eeg_align_{timestamp}.log"
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -61,7 +73,9 @@ if __name__ == "__main__":
     
     # optional test to output the +/- 2sec from predicted task beep time as wav file in output/
     if run_test == True:
-        date_folder = vhdr_path_obj.parent.parent.name
+        date_folder = date_dir.name
+        output_beep_dir = output_path_obj / "beep_segments"
+        output_beep_dir.mkdir(parents=True, exist_ok=True)
         beep_path = output_path_obj / f"beep_segment_{vhdr_path_obj.stem}_{date_folder}.wav"
         save_predicted_beep(beep_time=predicted_beep_time, audio_voltages=stitched_voltages_raw, sfreq=audio_sfreq, output_path=beep_path)
         logger.info(f"Saved predicted beep segment to {output_path_obj}")
