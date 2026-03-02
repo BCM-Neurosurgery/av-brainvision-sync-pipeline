@@ -1,0 +1,3 @@
+[submodule "third_party/video-sync-nbu"]
+	path = third_party/video-sync-nbu
+	url = git@github.com:BCM-Neurosurgery/video-sync-nbu.git
