@@ -6,9 +6,12 @@ from scipy.io import wavfile
 import mne
 import numpy as np
 from scipy.signal import correlate
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import os
 import logging
+import subprocess
+import json
 
 logger = logging.getLogger("audio_eeg_sync")
 
@@ -64,9 +67,11 @@ def find_experiment_times(events, event_id):
     return first_stim_sample, last_stim_sample
 
 # parse the brain vision vhdr and vmrk file to get the pulses array and sampling frequency 
-def parse_brainvision(vhdr_path_object: Path, response_id="Response/R257") -> tuple[float, float, np.ndarray]:
+def parse_brainvision(vhdr_path_object: Path, response_id="Response/R257") -> tuple[datetime, float, float, np.ndarray]:
     raw = mne.io.read_raw_brainvision(vhdr_path_object, preload=False)
     sfreq = raw.info['sfreq']
+    bv_file_start = raw.info['meas_date']   # UTC time
+    logger.info(f"Found brainvision file start {bv_file_start}")
     events, event_id = mne.events_from_annotations(raw)
     # event_id -> {'Reponse name': number of responses }
     # events -> [sample_index, 0, event_code]
@@ -85,7 +90,7 @@ def parse_brainvision(vhdr_path_object: Path, response_id="Response/R257") -> tu
 
     logger.debug(f"Brainvision sync pulse array size {len(response_times)}")
 
-    return start_time, end_time, response_times
+    return bv_file_start, start_time, end_time, response_times
 
 # return the raw audio file list and audio pulse file list from the audio path object
 def get_audio_files(audio_path_object: Path) -> tuple[list[Path], list[Path]]:
@@ -124,18 +129,22 @@ def sort_files_chronologically(file_list: list[Path]) -> list[Path]:
 def stitch_files(sorted_file_list: list[Path]) -> tuple[int, np.ndarray]:
     voltage_chunks = []
     for file in sorted_file_list:
-        sfreq, voltages= wavfile.read(file)
+        sfreq, voltages= wavfile.read(str(file))
         voltage_chunks.append(voltages)
     
     stitched_voltages = np.concatenate(voltage_chunks)
     return sfreq, stitched_voltages
 
 # parse the audio file to get the pulses array 
-def parse_audio(audio_path_object: Path) -> tuple[int, np.ndarray, np.ndarray, np.ndarray]:
+def parse_audio(audio_path_object: Path) -> tuple[datetime, int, np.ndarray, np.ndarray, np.ndarray]:
 
     raw_audio_files, audio_pulse_files = get_audio_files(audio_path_object=audio_path_object)
     raw_audio_sorted = sort_files_chronologically(file_list=raw_audio_files)
     audio_pulse_sorted = sort_files_chronologically(file_list=audio_pulse_files)
+    
+    audio_file_start = get_audio_dt(audio_path=raw_audio_sorted[0])
+    logger.info(f"Found datetime object for audio file start: {audio_file_start}")
+
     sfreq, stitched_voltages_pulses = stitch_files(sorted_file_list=audio_pulse_sorted)
     logger.info("Finished stitching audio pulse files")
     sfreq_raw, stitched_voltages_raw = stitch_files(sorted_file_list=raw_audio_sorted)
@@ -154,7 +163,23 @@ def parse_audio(audio_path_object: Path) -> tuple[int, np.ndarray, np.ndarray, n
     pulses_confirmed_times = pulses_confirmed_samples/sfreq
     logger.debug(f"Found {len(pulses_confirmed_times)} pulses in stitched audio pulse file")
 
-    return sfreq, pulses_confirmed_times, stitched_voltages_pulses, stitched_voltages_raw
+    return audio_file_start, sfreq, pulses_confirmed_times, stitched_voltages_pulses, stitched_voltages_raw
+
+# get the local datetime of reaper audio file creation from the metadata
+def get_audio_dt(audio_path: Path) -> datetime: 
+    cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-show_entries", "format_tags",
+        "-of", "json",
+        str(audio_path)
+    ]
+    out = subprocess.check_output(cmd, text=True)
+    tags = json.loads(out)["format"].get("tags", {})
+    date_str = tags.get("date")
+    time_str = tags.get("creation_time")
+    dt = datetime.strptime(f"{date_str} {time_str}","%Y-%m-%d %H-%M-%S")
+    return dt.replace(tzinfo=timezone.utc)
 
 # perform the correlation to get the line of best fit b/w the two aligned time arrays for bv and audio
 def find_time_alignment(bv_pulse_times: np.ndarray, audio_pulse_times: np.ndarray) -> tuple[float, float]:
@@ -190,9 +215,9 @@ def apply_alignment(rel_clock_rates: float, offset: float, bv_time: float, audio
     return audio_sample
 
 # save wav file with predicted beep time and 2 second buffer
-def save_predicted_beep(beep_time: float, audio_voltages: np.ndarray, sfreq: int, output_path: Path, buffer=2) -> None:
-    start_sample = int(round((beep_time - buffer)*sfreq))
-    end_sample = int(round((beep_time+buffer)*sfreq))
+def save_predicted_beep(beep_time: float, audio_voltages: np.ndarray, sfreq: int, output_path: Path, buffer_sec=10) -> None:
+    start_sample = int(round((beep_time - buffer_sec)*sfreq))
+    end_sample = int(round((beep_time+buffer_sec)*sfreq))
     if start_sample < 0 or end_sample>len(audio_voltages):
         message = (
             f"Predicted beep window out of bounds: "
@@ -204,8 +229,66 @@ def save_predicted_beep(beep_time: float, audio_voltages: np.ndarray, sfreq: int
     beep_segment = audio_voltages[start_sample:end_sample]
     wavfile.write(output_path, sfreq, beep_segment)
 
+# find the best guess window for waveform matching beep estimation
+def find_window(audio_file_start: datetime, bv_file_start: datetime, exp_start_time: float, buffer_sec= 20) -> tuple[float, float]:
+    audio_file_start_utc = audio_file_start.astimezone(timezone.utc)
+    exp_delta = timedelta(seconds=exp_start_time)
+    logger.info(f"Find window: exp delta: {exp_delta}")
+    exp_absolute_time = bv_file_start + exp_delta
+    logger.info(f"Find window: exp absolute time: {exp_absolute_time}")
+    audio_search_middle = (exp_absolute_time - audio_file_start_utc).total_seconds()
+    logger.info(f"Find window: audio search middle: {audio_search_middle}")
+    audio_search_start = audio_search_middle - buffer_sec
+    audio_search_end = audio_search_middle +buffer_sec
+    logger.info(f"Found the window for the audio beep matching, start: {audio_search_start} end: {audio_search_end}")
+    return audio_search_start, audio_search_end
 
+# estimate the beep with the old method (waveform matching)
+def beep_matching(voltages_raw: np.ndarray, audio_sfreq: int, beep_file: Path, 
+                  audio_search_start: float, audio_search_end: float, ds_factor=22) -> float:
+    
+    _, voltages_beep = wavfile.read(str(beep_file))
 
+    if voltages_beep.ndim > 1:
+        voltages_beep = voltages_beep[:,0]
+
+    # remove leading and trailing zeros from beep
+    beep_nonzero_indices = np.nonzero(voltages_beep)[0]
+    voltages_beep = voltages_beep[beep_nonzero_indices[0]:beep_nonzero_indices[-1]]
+
+    # convert search start and end to samples
+    start_sample = int(round(audio_search_start*audio_sfreq))
+    end_sample = int(round(audio_search_end*audio_sfreq))
+
+    # safety check for cropping window
+    if start_sample < 0 or end_sample > len(voltages_raw) or start_sample >= end_sample:
+        msg = f"Invalid search window: start={start_sample}, end={end_sample}, len={len(voltages_raw)}"
+        logger.error(msg)
+        raise ValueError(msg)
+    
+    # crop data around search window
+    voltages_raw = voltages_raw[start_sample:end_sample]
+
+    # downsample voltages for audio and beep
+    voltages_audio_ds = voltages_raw[::ds_factor]
+    voltages_beep_ds = voltages_beep[::ds_factor]
+
+    # z-score the signal
+    voltages_audio_norm = (voltages_audio_ds - voltages_audio_ds.mean())/voltages_audio_ds.std()
+    voltages_beep_norm = (voltages_beep_ds-voltages_beep_ds.mean())/voltages_beep_ds.std()
+
+    sfreq_ds = audio_sfreq/ds_factor
+
+    # find the index where the beep occurs in the audio file
+    c = correlate(voltages_audio_norm, voltages_beep_norm, mode="valid")
+    scores = np.abs(c)
+    best_index = int(np.argmax(scores))
+
+    start_time = (best_index/sfreq_ds)+audio_search_start
+
+    logger.info(f"Old beep matching method found task beep at {start_time} in audio file")
+    
+    return start_time
     
 
 
