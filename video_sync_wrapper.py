@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-PIPELINE_ROOT = Path(__file__).resolve().parent / "third_party" / "video_sync_nbu_main"
+PIPELINE_ROOT = Path(__file__).resolve().parent / "third_party" / "video-sync-nbu"
 sys.path.insert(0,str(PIPELINE_ROOT))
 
 from scripts.cli.cli_nbu import run_pipeline
