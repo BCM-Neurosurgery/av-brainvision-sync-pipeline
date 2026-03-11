@@ -1,5 +1,11 @@
-from helper_functions import *
-from video_sync_wrapper import run_pipeline_gui
+from av_bv_sync.ui import select_file, select_dir, confirm_or_select_dir
+from av_bv_sync.brainvision import parse_brainvision
+from av_bv_sync.audio import parse_audio
+from av_bv_sync.alignment import find_window, find_time_alignment, apply_alignment
+from av_bv_sync.beep_detection import beep_matching_all, beep_matching_window, save_predicted_beep
+from av_bv_sync.video_sync_wrapper import run_pipeline_gui
+from pathlib import Path
+from datetime import datetime
 import logging
 
 # Remaining to dos
@@ -11,16 +17,16 @@ import logging
 if __name__ == "__main__":
 
     # define repo absolute path
-    SCRIPT_DIR = Path(__file__).resolve().parent
+    PIPELINE_ROOT = Path(__file__).resolve().parents[2]
+    ASSETS_DIR = PIPELINE_ROOT / "assets"
 
     # option for old waveform matching method (arduino independent)
     run_waveform_beep_matching = True
 
-    # option for 
+    # option for running arduino beep matching 
     run_arduino_beep_matching = False
 
-    # option to run both
-    run_both = True
+
 
     # pull up the file explorer to choose the preprocessed file
     vhdr_path_obj = select_file(
@@ -94,9 +100,9 @@ if __name__ == "__main__":
         logger.info(f"Saved predicted beep segment to {beep_path}")
 
     # optional backup alignment method: use waveform matchingfor beeps
-    if run_waveform_beep_matching or run_both: 
+    if run_waveform_beep_matching: 
         # define task beep paths
-        prt_paat_beep_path = SCRIPT_DIR / "task_beeps" / "PAAT.wav"
+        prt_paat_beep_path = ASSETS_DIR / "task_beeps" / "PAAT.wav"
         output_waveform_beep_dir = output_path_obj / "old_method_beep_segments"
         output_waveform_beep_dir.mkdir(parents=True, exist_ok=True)
 

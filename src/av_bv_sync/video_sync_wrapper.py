@@ -1,8 +1,11 @@
 import sys
 from pathlib import Path
 
-PIPELINE_ROOT = Path(__file__).resolve().parent / "third_party" / "video-sync-nbu"
-sys.path.insert(0,str(PIPELINE_ROOT))
+PIPELINE_ROOT = Path(__file__).resolve().parents[2] 
+VIDEO_SYNC_ROOT = PIPELINE_ROOT / "third_party" / "video-sync-nbu"
+
+if str(PIPELINE_ROOT) not in sys.path:  
+    sys.path.insert(0,str(VIDEO_SYNC_ROOT))
 
 from scripts.cli.cli_nbu import run_pipeline
 from scripts.log.logutils import configure_logging
