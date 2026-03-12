@@ -1,4 +1,4 @@
-from av_bv_sync.ui import select_file, select_dir, confirm_or_select_dir
+from av_bv_sync.ui import select_file, select_dir, confirm_or_select_dir, select_analysis_method
 from av_bv_sync.brainvision import parse_brainvision
 from av_bv_sync.audio import parse_audio
 from av_bv_sync.alignment import find_window, find_time_alignment, apply_alignment
@@ -9,9 +9,13 @@ from datetime import datetime
 import logging
 
 # Remaining to dos
-    # testing pipeline on at as many sessions as possible
-    # test on windows
-    # submodule or figure out solution for third party repo
+    # run on dry tortugas
+    # three functions:
+        # 1. beep matching w/ arduino -> specific start of experiment and end (bv task time+10s), output wav file to verify time alignment
+        # 2. waveform matching w/ task beep -> file metadata available, finds start time based on normalized cross correlation in window and end (bv task time + 10s), output wav file to verify time alignment 
+        # 3. waveform matching across audio file -> no file metadata, finds candidates times, performs norm cross correlation around candidate time windows, finds correlation vals exceeding a threshold, outputs the expected time in wav file name
+            # requires user input to be able to select the correct Brainvision file for the experiment end time
+    # standalone audio/video sync with gui for specific times?
     # bash script to run everything from desktop app
 
 if __name__ == "__main__":
@@ -19,14 +23,6 @@ if __name__ == "__main__":
     # define repo absolute path
     PIPELINE_ROOT = Path(__file__).resolve().parents[2]
     ASSETS_DIR = PIPELINE_ROOT / "assets"
-
-    # option for old waveform matching method (arduino independent)
-    run_waveform_beep_matching = True
-
-    # option for running arduino beep matching 
-    run_arduino_beep_matching = False
-
-
 
     # pull up the file explorer to choose the preprocessed file
     vhdr_path_obj = select_file(
@@ -53,6 +49,21 @@ if __name__ == "__main__":
         title="Select the directory you want to save the aligned files to"
     )
     
+    # prompt user to select the desired analysis method
+    selection = select_analysis_method()
+
+    if selection == "arduino_beep_matching": # option for old waveform matching method (arduino independent)
+        run_arduino_beep_matching = True
+        run_waveform_beep_matching = False
+    
+    elif selection == "waveform_beep_matching":
+        run_arduino_beep_matching = False
+        run_waveform_beep_matching = True
+    
+    else:
+        run_arduino_beep_matching = True
+        run_waveform_beep_matching = True
+
     # set up logger
     timestamp = datetime.now().strftime("%y%m%d_%H%M")
     log_file_dir = output_path_obj / "logs"

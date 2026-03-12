@@ -28,7 +28,7 @@ def save_predicted_beep(
     beep_segment = audio_voltages[start_sample:end_sample]
     wavfile.write(output_path, sfreq, beep_segment)
 
-# estimate the beep with normalized cross correlation of beep template in audio file
+# estimate the beep when you don't have any audio file info with a crude fft correlation for candidate times and then a normalized cross correlation of each candidate time
 def beep_matching_all(
     voltages_raw: np.ndarray, 
     audio_sfreq: int, 

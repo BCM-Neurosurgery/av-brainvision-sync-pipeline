@@ -5,6 +5,7 @@ import tkinter as tk
 import sys
 
 logger = logging.getLogger("audio_eeg_sync")
+
 # pulls up the file explorer and selects a file
 def select_file(
     title: str, 
@@ -57,3 +58,26 @@ def confirm_or_select_dir(
     else:
         correct_dir = select_dir(title=title, initial_dir=guessed_path)
         return correct_dir
+
+def select_analysis_method(
+    )-> bool:
+    root = tk.Tk()
+    root.title("Select Analysis Method")
+    root.geometry("600x400")
+    # default method -> arduino beep matching 
+    selection = tk.StringVar(value="arduino_beep_matching") 
+    tk.Label(root, text="Choose an alignment method:").pack(pady=10)
+
+    tk.Radiobutton(root, text="Run Arduino Beep Matching", variable=selection, value="arduino_beep_matching").pack()
+    tk.Radiobutton(root, text="Run Waveform Beep Matching", variable=selection, value="waveform_beep_matching").pack()
+    tk.Radiobutton(root, text="Run Both Matching Methods", variable=selection, value="run_both").pack()
+    
+    tk.Button(root, text="Run", command=root.destroy()).pack(pady=10)
+
+    root.mainloop()
+
+    if not selection:
+        print("No directory selected")
+        sys.exit(0)
+
+    return selection.get()
