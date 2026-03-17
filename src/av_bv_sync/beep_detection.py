@@ -1,18 +1,19 @@
 from pathlib import Path
 from scipy.io import wavfile
+import soundfile as sf
 import numpy as np
 from scipy.signal import find_peaks, resample_poly, correlate
 
 import logging
 logger = logging.getLogger("audio_eeg_sync")
 
-# save wav file with predicted beep time and 2 second buffer
+# save wav file with predicted beep time and 60 second buffer
 def save_predicted_beep(
     beep_time: float, 
     audio_voltages: np.ndarray, 
     sfreq: int, 
     output_path: Path, 
-    buffer_sec=15
+    buffer_sec=60
 ) -> None:
     
     start_sample = int(round((beep_time - buffer_sec)*sfreq))
@@ -26,7 +27,7 @@ def save_predicted_beep(
         logger.error(message)
         raise ValueError(message)
     beep_segment = audio_voltages[start_sample:end_sample]
-    wavfile.write(output_path, sfreq, beep_segment)
+    sf.write(output_path, beep_segment, sfreq)
 
 # estimate the beep when you don't have any audio file info with a crude fft correlation for candidate times and then a normalized cross correlation of each candidate time
 def beep_matching_all(
@@ -37,10 +38,10 @@ def beep_matching_all(
     downsample_factor: int=10,
     local_window_sec: float=10.0
 
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     
     logger.info("Performing beep matching all")
-    _, voltages_beep = wavfile.read(str(beep_file))
+    sfreq_original, voltages_beep = wavfile.read(str(beep_file))
 
     if voltages_beep.ndim > 1:
         voltages_beep = voltages_beep[:,0]
@@ -110,8 +111,9 @@ def beep_matching_all(
         else:
             if np.min(np.abs(np.array(final_times) - beep_time)) > min_gap_sec:
                 final_times.append(beep_time)
-
-    return np.array(sorted(final_times))
+    final_times = np.array(sorted(final_times))
+    final_samples = np.round(final_times * sfreq_original).astype(int)
+    return final_times, final_samples
 
 # estimate the beep with normalized cross correlation of beep template in audio file
 def beep_matching_window(

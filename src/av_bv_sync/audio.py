@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from scipy.io import wavfile
 import subprocess
 import json
+import soundfile as sf
 
 import logging
 logger = logging.getLogger("audio_eeg_sync")
@@ -65,15 +66,17 @@ def sort_files_chronologically(
     file_list: list[Path]
 ) -> list[Path]:
     
-    sorted_files = []
-    file_datetimes = []
+    datetime_to_file = {}
+
     for file in file_list:
         dt = get_datetime(file)
-        file_datetimes.append((file,dt))
+        if dt not in datetime_to_file:
+            datetime_to_file[dt] = file
     
-    sorted_file_datetimes = sorted(file_datetimes, key=lambda pair:pair[1])
-    for file, dt in sorted_file_datetimes:
-        sorted_files.append(file)
+    sorted_pairs = sorted(datetime_to_file.items(), key=lambda pair:pair[0])
+    
+    sorted_files = [file for dt, file in sorted_pairs]
+
     return sorted_files   
 
 # stitch files together
@@ -82,8 +85,16 @@ def stitch_files(
 ) -> tuple[int, np.ndarray]:
     
     voltage_chunks = []
+
     for file in sorted_file_list:
-        sfreq, voltages= wavfile.read(str(file))
+        logger.info(f"Reading wav file: {file}")
+        try:
+            voltages, sfreq = sf.read(str(file))
+        except Exception as e:
+            logger.error(f"Failed reading wav file: {file}")
+            logger.error(f"Error: {e}")
+            raise
+
         voltage_chunks.append(voltages)
     
     stitched_voltages = np.concatenate(voltage_chunks)
@@ -160,4 +171,10 @@ def get_audio_dt(
         return None
     dt = datetime.strptime(f"{date_str} {time_str}","%Y-%m-%d %H-%M-%S")
     return dt.replace(tzinfo=timezone.utc)
+
+# quickly get audio file sampling frequency
+def get_audio_sfreq(
+    audio_file: Path
+) -> int:
+    return sf.info(audio_file).samplerate
 
