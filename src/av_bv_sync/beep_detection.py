@@ -57,7 +57,7 @@ def beep_matching_all(
 
     corr = np.abs(correlate(audio_ds, beep_ds, mode="valid", method="fft"))
 
-    coarse_threshold = .7 * np.max(corr)
+    coarse_threshold = .6 * np.max(corr)
     min_gap_samples_ds = int(round((min_gap_sec * audio_sfreq) / downsample_factor))
 
     peak_samples_ds, _ = find_peaks(
@@ -90,7 +90,7 @@ def beep_matching_all(
 
         best_score = scores[best_index]
 
-        if best_score >= 0.75:
+        if best_score >= 0.70:
             refined_time = (start_sample + best_index) / audio_sfreq
             refined_times.append(refined_time)
             refined_scores.append(best_score)
