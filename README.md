@@ -15,6 +15,7 @@ av-brainvision-sync-pipeline/
 ├── environment.yml               # conda environment
 ├── pyproject.toml                # package definition
 └── README.md
+```
 
 ## Setup
 1. Clone the Repository
@@ -39,7 +40,7 @@ Windows
     2. Extract the archive to a permanent location
     3. Inside the extracted folder, locate the `bin` folder 
     4. Add that `bin` folder to your system `PATH`
-    5. Open a new terminal or Command Prompt and verify the ffmpeg -version 
+    5. Open a new terminal or Command Prompt and verify the `ffmpeg -version` 
 
 4. Create the Conda Environment
 `conda env create -f environment.yml`
