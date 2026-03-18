@@ -34,7 +34,7 @@ def beep_matching_all(
     voltages_raw: np.ndarray, 
     audio_sfreq: int, 
     beep_file: Path,
-    min_gap_sec: float=300.0,
+    min_gap_sec: float=60.0,
     downsample_factor: int=10,
     local_window_sec: float=10.0
 
@@ -57,7 +57,7 @@ def beep_matching_all(
 
     corr = np.abs(correlate(audio_ds, beep_ds, mode="valid", method="fft"))
 
-    coarse_threshold = .6 * np.max(corr)
+    coarse_threshold = .4 * np.max(corr)
     min_gap_samples_ds = int(round((min_gap_sec * audio_sfreq) / downsample_factor))
 
     peak_samples_ds, _ = find_peaks(
@@ -67,6 +67,8 @@ def beep_matching_all(
     )
 
     candidate_times_sec = (peak_samples_ds * downsample_factor) / audio_sfreq
+    logger.info(f"Coarse stage found {len(peak_samples_ds)} candidates")
+    logger.info(f"Candidate times (sec): {candidate_times_sec}")
 
     refined_times = []
     refined_scores = []
@@ -90,7 +92,7 @@ def beep_matching_all(
 
         best_score = scores[best_index]
 
-        if best_score >= 0.70:
+        if best_score >= 0.60:
             refined_time = (start_sample + best_index) / audio_sfreq
             refined_times.append(refined_time)
             refined_scores.append(best_score)
