@@ -28,14 +28,14 @@ av-brainvision-sync-pipeline/
 3. Install FFmpeg
 FFmpeg is required for audio/video processing.
 
-Mac (Homebrew)
+- Mac (Homebrew)
 `brew install ffmpeg`
 
-Ubuntu/Linux
+- Ubuntu/Linux
 `sudo apt update`
 `sudo apt install ffmpeg`
 
-Windows
+- Windows
     1. Download FFmpeg zip archive
     2. Extract the archive to a permanent location
     3. Inside the extracted folder, locate the `bin` folder 
