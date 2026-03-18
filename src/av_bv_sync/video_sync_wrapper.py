@@ -4,7 +4,7 @@ from pathlib import Path
 PIPELINE_ROOT = Path(__file__).resolve().parents[2] 
 VIDEO_SYNC_ROOT = PIPELINE_ROOT / "third_party" / "video-sync-nbu"
 
-if str(PIPELINE_ROOT) not in sys.path:  
+if str(VIDEO_SYNC_ROOT) not in sys.path:  
     sys.path.insert(0,str(VIDEO_SYNC_ROOT))
 
 from scripts.cli.cli_nbu import run_pipeline
@@ -32,7 +32,11 @@ def run_pipeline_gui(
         target_pairs=None,
         log_level=log_level,
         skip_decode=False,
-        do_split=False,
+        do_split=True,
+        split_chunk_seconds=600,
+        split_overwrite=False,
+        split_clean=True,
+        split_outdir=None,
         overwrite_clips=False,
         resume_from_segment=None,
         time_start=None,

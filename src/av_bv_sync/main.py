@@ -17,7 +17,7 @@ if __name__ == "__main__":
     # define repo absolute path
     PIPELINE_ROOT = Path(__file__).resolve().parents[2]
     ASSETS_DIR = PIPELINE_ROOT / "assets"
-
+    
     # instantiate dialog window object
     app_root = tk.Tk()
     app_root.withdraw()
@@ -82,7 +82,7 @@ if __name__ == "__main__":
 
     date_dir= audio_path_obj.parent.name
     patient_id = audio_path_obj.parents[2].name
-    output_path_obj = output_path_obj / date_dir
+    output_path_obj = output_path_obj / patient_id / date_dir
     pipeline_output_dir = output_path_obj / "av_brainvision_sync_logs"
     log_file_dir = pipeline_output_dir / "logs"
     log_file_dir.mkdir(parents=True, exist_ok=True)
