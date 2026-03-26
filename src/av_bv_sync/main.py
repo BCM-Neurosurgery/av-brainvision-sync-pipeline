@@ -136,6 +136,8 @@ if __name__ == "__main__":
 
         # # go ahead and run the a/v sync pipeline directly with audio start sample and audio end sample
         logger.info(f"Running video sync pipeline, results will be saved to {output_path_obj}")
+        exp_name = vhdr_path_obj.stem
+        output_template = exp_name+"_{datetime}_{cam_serial}"
         run_pipeline_gui(
             audio_dir=audio_path_obj,
             video_dir=video_path_obj,
@@ -143,6 +145,7 @@ if __name__ == "__main__":
             site="jamail",
             audio_sample_start=audio_start_sample,
             audio_sample_end=audio_end_sample,
+            output_template=output_template,
         )
 
     # branch for running arduino pulse matching
@@ -173,6 +176,8 @@ if __name__ == "__main__":
 
         # go ahead and run the a/v sync pipeline directly with audio start sample and audio end sample
         logger.info(f"Running video sync pipeline, results will be saved to {output_path_obj}")
+        exp_name = vhdr_path_obj.stem
+        output_template = exp_name.upper()+"_{datetime}_{cam_serial}"
         run_pipeline_gui(
             audio_dir=audio_path_obj,
             video_dir=video_path_obj,
@@ -180,6 +185,7 @@ if __name__ == "__main__":
             site="jamail",
             audio_sample_start=audio_start_sample,
             audio_sample_end=audio_end_sample,
+            output_template=output_template,
         )
 
 
