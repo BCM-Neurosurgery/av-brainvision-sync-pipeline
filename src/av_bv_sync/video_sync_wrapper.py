@@ -18,6 +18,7 @@ def run_pipeline_gui(
     site: str,
     audio_sample_start: int,
     audio_sample_end: int,
+    output_template: str | None = None,
     log_level: str = "INFO",
 ) -> int:
     configure_logging(out_dir, log_level)
@@ -45,4 +46,5 @@ def run_pipeline_gui(
         audio_sample_start=int(audio_sample_start),
         audio_sample_end=int(audio_sample_end),
         run_id=None,
+        output_template=output_template,
     )
